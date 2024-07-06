@@ -1,53 +1,69 @@
-import os
-
-import django
 import pytest
-
-# from checkout.models import Product
+from checkout.models import Product  # Make sure to import the correct model
+from checkout.serializers import ProductSerializer  # Import your serializer
 from django.urls import reverse
-from rest_framework import status
 from rest_framework.test import APIClient
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nimblestore.settings")
-django.setup()
 
 
 @pytest.fixture
 def api_client():
+    """
+    Fixture that provides an instance of APIClient for testing.
+    """
     return APIClient()
 
 
-# TODO change to fit your product properties
 @pytest.fixture
 def create_product():
-    pass
-    # def _create_product(name, price, quantity):
-    #     return Product.objects.create(name=name, price=price, quantity=quantity)
-    # return _create_product
+    """
+    Fixture that creates a Product instance with specified attributes.
+    """
+
+    def _create_product(name, price, quantity):
+        return Product.objects.create(name=name, price=price, quantity=quantity)
+
+    return _create_product
 
 
-def dummy_test():
-    assert 1 == 1
-
-
-def dummy_failing():
-    assert 1 == 2
-
-
+@pytest.mark.django_db
 def test_get_products(api_client, create_product):
-    create_product(name="Test Product 1", price=10.00, quantity=100)
-    create_product(name="Test Product 2", price=15.00, quantity=200)
+    """
+    Test case to verify GET request for retrieving products.
+    """
+    product1 = create_product("Test Product 1", 10.00, 100)
+    product2 = create_product("Test Product 2", 15.00, 200)
 
-    url = reverse("product-list")  # Adjust this to your actual URL name
+    url = reverse("products")  # Adjust this to the actual URL name
+
     response = api_client.get(url)
+    assert response.status_code == 200
 
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data) == 2
+    serializer = ProductSerializer([product1, product2], many=True)
+    assert response.data == serializer.data
 
 
+@pytest.mark.django_db
 def test_post_order(api_client, create_product):
-    # product1 = create_product(name="Test Product 1", price=10.00, quantity=100)
-    # product2 = create_product(name="Test Product 2", price=15.00, quantity=200)
+    """
+    Test case to verify POST request for placing an order.
+    """
+    product1 = create_product("Test Product 1", 10.00, 100)
+    product2 = create_product("Test Product 2", 15.00, 200)
 
-    # TODO finish the test
-    pass
+    order_data = [
+        {"product": product1.name, "quantity": 2},
+        {"product": product2.name, "quantity": 3},
+    ]
+
+    url = reverse("order")  # Adjust this to the actual URL name
+
+    response = api_client.post(url, order_data, format="json")
+
+    assert response.status_code == 200
+    assert "total" in response.data
+    assert response.data["total"] == 65.00
+
+    product1.refresh_from_db()
+    product2.refresh_from_db()
+    assert product1.quantity == 98  # 100 - 2
+    assert product2.quantity == 197  # 200 - 3
